@@ -1,0 +1,33 @@
+<!DOCTYPE html>
+<html>
+<head>
+    <title>Repository Similarity Report</title>
+    <style>
+        body { font-family: Arial; padding: 20px; }
+        h1 { color: #333; }
+        .card {
+            border: 1px solid #ddd;
+            padding: 15px;
+            margin: 10px 0;
+            border-radius: 8px;
+        }
+    </style>
+</head>
+<body>
+
+<h1>Similarity Report</h1>
+
+<p><b>Repository:</b> {{ data.repo_url }}</p>
+<p><b>Final Score:</b> {{ data.aggregated_score }}</p>
+
+<h2>Agent-Level Results</h2>
+
+{% for item in data.results %}
+<div class="card">
+    <b>Agent:</b> {{ item.agent }} <br>
+    <b>Score:</b> {{ item.score }}
+</div>
+{% endfor %}
+
+</body>
+</html>
