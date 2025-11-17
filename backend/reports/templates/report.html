@@ -1,33 +1,81 @@
 <!DOCTYPE html>
 <html>
 <head>
-    <title>Repository Similarity Report</title>
+    <meta charset="utf-8">
+    <title>Repository Analysis Report</title>
+
     <style>
-        body { font-family: Arial; padding: 20px; }
-        h1 { color: #333; }
-        .card {
-            border: 1px solid #ddd;
+        body {
+            font-family: Arial, sans-serif;
+            padding: 20px;
+            color: #333;
+        }
+
+        h1 { color: #3366cc; }
+        .section {
+            margin-bottom: 25px;
             padding: 15px;
-            margin: 10px 0;
+            background: #f7f7f7;
             border-radius: 8px;
+        }
+
+        .repo-box {
+            padding: 10px;
+            border-left: 4px solid #4CAF50;
+            margin-bottom: 10px;
+            background: #fff;
+        }
+
+        .score {
+            font-weight: bold;
+            color: #4CAF50;
         }
     </style>
 </head>
+
 <body>
 
-<h1>Similarity Report</h1>
+<h1>Repository Similarity Analysis Report</h1>
 
-<p><b>Repository:</b> {{ data.repo_url }}</p>
-<p><b>Final Score:</b> {{ data.aggregated_score }}</p>
-
-<h2>Agent-Level Results</h2>
-
-{% for item in data.results %}
-<div class="card">
-    <b>Agent:</b> {{ item.agent }} <br>
-    <b>Score:</b> {{ item.score }}
+<div class="section">
+    <h2>Input Repository</h2>
+    <p>{{ data.input_repo }}</p>
 </div>
-{% endfor %}
+
+<div class="section">
+    <h2>Top 3 Similar Repositories</h2>
+
+    {% if data.top_3_repos %}
+        {% for repo in data.top_3_repos %}
+            <div class="repo-box">
+                <p><b>Repository:</b> {{ repo.repo_url }}</p>
+                <p><b>Similarity:</b> <span class="score">{{ repo.final_similarity * 100 }}%</span></p>
+            </div>
+        {% endfor %}
+    {% else %}
+        <p>No similar repositories found.</p>
+    {% endif %}
+</div>
+
+<div class="section">
+    <h2>All Repository Scores (Detailed)</h2>
+
+    {% for repo in data.all_repo_scores %}
+        <div class="repo-box">
+            <p><b>{{ repo.repo_url }}</b></p>
+            <p>Similarity: {{ repo.final_similarity * 100 }}%</p>
+
+            <details>
+                <summary>Agent Breakdown</summary>
+                <ul>
+                    {% for agent in repo.agent_scores %}
+                        <li>{{ agent.agent }} → {{ agent.score }}</li>
+                    {% endfor %}
+                </ul>
+            </details>
+        </div>
+    {% endfor %}
+</div>
 
 </body>
 </html>

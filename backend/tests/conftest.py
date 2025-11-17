@@ -1,22 +1,28 @@
 import pytest
 import tempfile
 import os
-from fastapi.testclient import TestClient
-from main import app
-
-@pytest.fixture(scope="session")
-def client():
-    return TestClient(app)
+from storage.file_manager import ensure_folder
 
 @pytest.fixture
-def tmp_repo(tmp_path):
-    # create a tiny fake repo
-    repo_dir = tmp_path / "repo"
-    repo_dir.mkdir()
-    (repo_dir / "a.py").write_text("print('hello')\n# comment\n")
-    (repo_dir / "b.py").write_text("def foo():\n    return 1\n")
-    # create .git/logs/HEAD to satisfy contributor agent
-    git_dir = repo_dir / ".git" / "logs"
-    git_dir.mkdir(parents=True)
-    (git_dir / "HEAD").write_text("commitlog sample")
-    return str(repo_dir)
+def temp_repo():
+    """
+    Creates a temporary repo folder for testing.
+    """
+    with tempfile.TemporaryDirectory() as tmp:
+        ensure_folder(tmp)
+        yield tmp
+
+
+@pytest.fixture
+def sample_code_file(temp_repo):
+    """
+    Creates a sample code file inside test repo.
+    """
+    file_path = os.path.join(temp_repo, "main.py")
+    with open(file_path, "w") as f:
+        f.write("""
+# This is a comment
+def add(a, b):
+    return a + b  # inline comment
+""")
+    return file_path

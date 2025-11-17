@@ -20,7 +20,7 @@ class SemanticAgent:
         return self.model.encode([text], convert_to_numpy=True)[0]
 
     def analyze(self, repo_path: str, depth: int = 1) -> Tuple[float, Dict]:
-        # collect file texts (short)
+        # collect file texts
         texts = []
         for root, _, files in os.walk(repo_path):
             for f in files:
@@ -30,21 +30,41 @@ class SemanticAgent:
                             texts.append(fh.read()[:2000])
                     except Exception:
                         continue
+
         if not texts:
             return 0.0, {"reason": "no_texts"}
+
+        # embeddings
         embs = [self._file_embedding(t) for t in texts]
-        # naive similarity measure: average pairwise cosine similarity
         vecs = np.vstack(embs)
-        # normalized
+
+        # normalize vectors
         norms = np.linalg.norm(vecs, axis=1, keepdims=True)
-        norms[norms==0] = 1
+        norms[norms == 0] = 1
         nvecs = vecs / norms
+
+        # cosine similarity matrix
         sims = (nvecs @ nvecs.T)
-        # ignore diagonal, compute mean of upper triangle
+
         n = sims.shape[0]
         if n <= 1:
             return 0.0, {"reason": "single_file"}
+
         tri_ix = np.triu_indices(n, k=1)
         mean_sim = float(sims[tri_ix].mean())
-        score = float(mean_sim)
-        return score, {"mean_pairwise_similarity": score, "files_analyzed": n}
+
+        return mean_sim, {
+            "mean_pairwise_similarity": mean_sim,
+            "files_analyzed": n
+        }
+
+    def run(self, repo_path: str) -> Dict:
+        """
+        Wrapper for Orchestrator compatibility.
+        """
+        score, details = self.analyze(repo_path)
+        return {
+            "agent": "semantic",
+            "score": score,
+            "details": details
+        }

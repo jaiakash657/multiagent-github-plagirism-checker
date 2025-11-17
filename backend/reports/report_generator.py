@@ -10,14 +10,21 @@ class ReportGenerator:
 
     def generate(self, report_data: dict, output_path: str):
         """
-        report_data expected:
+        report_data now expects:
+
         {
-           "repo_url": "...",
-           "results": [
-               {"agent": "...", "score": 0.82},
-               ...
-           ],
-           "aggregated_score": 0.78
+            "input_repo": "...",
+            "top_3_repos": [
+                {
+                    "repo_url": "...",
+                    "final_similarity": 0.87,
+                    "agent_scores": [...]
+                },
+                ...
+            ],
+            "all_repo_scores": [
+                {"repo_url": "...", "final_similarity": 0.87, ...}
+            ]
         }
         """
         template = self.env.get_template("report.html")

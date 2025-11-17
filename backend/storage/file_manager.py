@@ -36,7 +36,18 @@ def save_extracted(repo_name: str, file_name: str, content: str):
 def delete_repo_temp(repo_name: str):
     """
     Cleanup temporary repo after analysis.
+    Windows-safe version: forces deletion even for locked .git files.
     """
+    import stat
+
+    def remove_readonly(func, path, exc):
+        try:
+            os.chmod(path, stat.S_IWRITE)
+            func(path)
+        except Exception:
+            pass  # last layer of safety
+
     repo_path = os.path.join(BASE_DATA, "repos", repo_name)
+
     if os.path.exists(repo_path):
-        shutil.rmtree(repo_path)
+        shutil.rmtree(repo_path, onerror=remove_readonly)

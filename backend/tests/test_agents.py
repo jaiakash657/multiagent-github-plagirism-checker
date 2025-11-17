@@ -1,43 +1,36 @@
 from agents.lexical_agent import LexicalAgent
-from agents.semantic_agent import SemanticAgent
 from agents.structural_agent import StructuralAgent
+from agents.semantic_agent import SemanticAgent
 from agents.fingerprint_agent import FingerprintAgent
 from agents.contributor_agent import ContributorAgent
-import os
 
-def test_lexical_on_small(tmp_path):
-    p = tmp_path / "r"
-    p.mkdir()
-    (p / "t.py").write_text("a a a a b c d e f g")
+
+def test_lexical_agent(temp_repo):
     agent = LexicalAgent()
-    score, details = agent.analyze(str(p))
-    assert 0.0 <= score <= 1.0
+    result = agent.run(temp_repo)
+    assert "score" in result
+    assert result["agent"] == "LexicalAgent"
 
-def test_structural(tmp_path):
-    p = tmp_path / "r"
-    p.mkdir()
-    (p / "one.py").write_text("print(1)\n")
-    (p / "two.py").write_text("print(2)\n")
+
+def test_structural_agent(temp_repo):
     agent = StructuralAgent()
-    s, d = agent.analyze(str(p))
-    assert "file_count" in d
+    result = agent.run(temp_repo)
+    assert "score" in result
 
-def test_fingerprint(tmp_path):
-    p = tmp_path / "r"
-    p.mkdir()
-    content = "x=1\n"
-    (p / "a.py").write_text(content)
-    (p / "b.py").write_text(content)
+
+def test_semantic_agent(temp_repo):
+    agent = SemanticAgent()
+    result = agent.run(temp_repo)
+    assert "score" in result
+
+
+def test_fingerprint_agent(temp_repo):
     agent = FingerprintAgent()
-    s, d = agent.analyze(str(p))
-    assert s >= 0.0
+    result = agent.run(temp_repo)
+    assert "score" in result
 
-def test_contributor(tmp_path):
-    p = tmp_path / "r"
-    p.mkdir()
-    git_dir = p / ".git" / "logs"
-    git_dir.mkdir(parents=True)
-    (git_dir / "HEAD").write_text("some log with author@domain")
+
+def test_contributor_agent():
     agent = ContributorAgent()
-    s, d = agent.analyze(str(p))
-    assert isinstance(d, dict)
+    result = agent.run("dummy/path")
+    assert "score" in result

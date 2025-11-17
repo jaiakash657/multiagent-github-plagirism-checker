@@ -25,8 +25,26 @@ class FingerprintAgent:
                     hs = self._file_hash(path)
                     if hs:
                         hashes.setdefault(hs, []).append(path)
+
         duplicate_buckets = [v for v in hashes.values() if len(v) > 1]
         dup_count = sum(len(b) for b in duplicate_buckets)
         total = sum(len(v) for v in hashes.values()) or 1
+
         score = min(1.0, dup_count / total)
-        return score, {"duplicate_files": dup_count, "total_files": total, "buckets": duplicate_buckets[:10]}
+
+        return score, {
+            "duplicate_files": dup_count,
+            "total_files": total,
+            "buckets": duplicate_buckets[:10]
+        }
+
+    def run(self, repo_path: str) -> Dict:
+        """
+        Orchestrator-compatible wrapper.
+        """
+        score, details = self.analyze(repo_path)
+        return {
+            "agent": "fingerprint",
+            "score": score,
+            "details": details
+        }

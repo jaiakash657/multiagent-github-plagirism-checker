@@ -1,7 +1,23 @@
-from preprocessing.cleaner import strip_comments_and_blank
+from preprocessing.cleaner import clean_code
+from preprocessing.extractor import extract_clean_chunks
+from preprocessing.file_selector import list_valid_files
 
-def test_cleaner_basic():
-    text = "# comment\n\nprint('hi')\n'''multi\nline'''\n"
-    cleaned = strip_comments_and_blank(text)
-    assert "print" in cleaned
-    assert "comment" not in cleaned
+def test_clean_code():
+    raw = """
+# comment
+x = 10   # inline
+"""
+    cleaned = clean_code(raw)
+    assert "#" not in cleaned
+    assert "x = 10" in cleaned
+
+
+def test_extract_clean_chunks(sample_code_file):
+    chunks = extract_clean_chunks(sample_code_file)
+    assert len(chunks) > 0
+    assert "def add" in chunks[0]
+
+
+def test_file_selector(temp_repo, sample_code_file):
+    files = list_valid_files(temp_repo)
+    assert sample_code_file in files
