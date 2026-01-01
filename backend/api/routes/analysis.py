@@ -6,7 +6,6 @@ from workers.tasks import analyze_repository_task
 
 router = APIRouter()
 
-
 @router.post("/analyze")
 async def analyze_repo(repo_url: str = Body(..., embed=True)):
     """

@@ -1,54 +1,68 @@
-from typing import Tuple, Dict
+# agents/structural_agent.py
+import ast
+import hashlib
 import os
+from typing import List, Dict
+
+SUPPORTED_EXT = (".py", ".java", ".js")
+
+class StructuralExtractor(ast.NodeVisitor):
+    def __init__(self):
+        self.nodes = []
+
+    def generic_visit(self, node):
+        self.nodes.append(type(node).__name__)
+        super().generic_visit(node)
+
+def extract_structure(code: str) -> List[str]:
+    try:
+        tree = ast.parse(code)
+    except SyntaxError:
+        return []
+
+    extractor = StructuralExtractor()
+    extractor.visit(tree)
+    return extractor.nodes
+
+def structural_similarity(seq_a: List[str], seq_b: List[str]) -> float:
+    if not seq_a or not seq_b:
+        return 0.0
+
+    set_a, set_b = set(seq_a), set(seq_b)
+    return len(set_a & set_b) / len(set_a | set_b)
+
 
 class StructuralAgent:
-    def analyze(self, repo_path: str, depth: int = 1) -> Tuple[float, Dict]:
-        """
-        Structural checks: file counts, average file length, suspicious identical filenames, deep nesting.
-        """
-        file_count = 0
-        total_lines = 0
-        max_depth = 0
-        name_counts = {}
+    """
+    StructuralAgent:
+    - AST-based structural similarity
+    - Repo vs repo comparison
+    """
 
+    def _collect_nodes(self, repo_path: str) -> List[str]:
+        nodes = []
         for root, _, files in os.walk(repo_path):
-            depth_level = root.count(os.sep) - repo_path.count(os.sep)
-            max_depth = max(max_depth, depth_level)
-
             for f in files:
-                file_count += 1
-                name_counts[f] = name_counts.get(f, 0) + 1
+                if f.endswith(SUPPORTED_EXT):
+                    try:
+                        with open(os.path.join(root, f), "r", encoding="utf-8", errors="ignore") as fh:
+                            code = fh.read()
+                        nodes.extend(extract_structure(code))
+                    except Exception:
+                        continue
+        return nodes
 
-                try:
-                    with open(os.path.join(root, f), "r", encoding="utf-8", errors="ignore") as fh:
-                        total_lines += sum(1 for _ in fh)
-                except Exception:
-                    continue
+    def run(self, input_path: str, cand_path: str) -> dict:
+        nodes_a = self._collect_nodes(input_path)
+        nodes_b = self._collect_nodes(cand_path)
 
-        avg_lines = total_lines / (file_count or 1)
-        dup_names = sum(1 for v in name_counts.values() if v > 1)
+        score = structural_similarity(nodes_a, nodes_b)
 
-        # heuristic
-        score = min(1.0,
-            (dup_names * 0.3) +
-            (avg_lines / 1000.0) +
-            (max_depth * 0.05)
-        )
-
-        return score, {
-            "file_count": file_count,
-            "avg_lines": avg_lines,
-            "dup_names": dup_names,
-            "max_depth": max_depth
-        }
-
-    def run(self, repo_path: str) -> Dict:
-        """
-        Orchestrator-required wrapper.
-        """
-        score, details = self.analyze(repo_path)
         return {
             "agent": "structural",
             "score": score,
-            "details": details
+            "details": {
+                "node_count_a": len(nodes_a),
+                "node_count_b": len(nodes_b),
+            },
         }

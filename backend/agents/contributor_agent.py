@@ -1,41 +1,58 @@
 from typing import Tuple, Dict
 import os
-import json
-from datetime import datetime
+import subprocess
+from collections import Counter
 
 class ContributorAgent:
-    def analyze(self, repo_path: str, depth: int = 1) -> Tuple[float, Dict]:
-        """
-        Check commit history/author patterns — placeholder: tries to read .git/logs/HEAD if present
-        """
-        gitlogs = os.path.join(repo_path, ".git", "logs", "HEAD")
-        if not os.path.exists(gitlogs):
-            return 0.0, {"reason": "no_git_logs"}
+    """
+    Contributor analysis based on git commit history.
+    Produces a weak plagiarism signal based on authorship dominance.
+    """
 
-        authors = {}
+    def analyze(self, repo_path: str) -> Tuple[float, Dict]:
+        git_dir = os.path.join(repo_path, ".git")
+        if not os.path.exists(git_dir):
+            return 0.0, {"reason": "no_git_repo"}
+
         try:
-            with open(gitlogs, "r", encoding="utf-8", errors="ignore") as fh:
-                for line in fh:
-                    parts = line.strip().split()
-                    for token in parts:
-                        if "@" in token and "<" not in token:
-                            authors[token] = authors.get(token, 0) + 1
+            # get author emails from git log
+            result = subprocess.run(
+                ["git", "-C", repo_path, "log", "--pretty=format:%ae"],
+                stdout=subprocess.PIPE,
+                stderr=subprocess.PIPE,
+                text=True,
+                timeout=5
+            )
 
-            n_authors = len(authors)
-            score = min(1.0, (1.0 / (n_authors + 1)) if n_authors > 0 else 0.0)
+            if result.returncode != 0:
+                return 0.0, {"reason": "git_log_failed"}
+
+            authors = [line.strip() for line in result.stdout.splitlines() if line.strip()]
+            if not authors:
+                return 0.0, {"reason": "no_authors"}
+
+            counts = Counter(authors)
+            total_commits = sum(counts.values())
+            dominant_author, dominant_count = counts.most_common(1)[0]
+
+            dominance_ratio = dominant_count / total_commits
+
+            # scoring logic:
+            # single dominant author → higher suspicion
+            score = dominance_ratio
 
             return score, {
-                "n_authors": n_authors,
-                "sample_authors": list(authors.keys())[:5]
+                "total_commits": total_commits,
+                "n_authors": len(counts),
+                "dominant_author": dominant_author,
+                "dominance_ratio": round(dominance_ratio, 3),
+                "sample_authors": list(counts.keys())[:5]
             }
 
         except Exception as e:
             return 0.0, {"error": str(e)}
 
     def run(self, repo_path: str) -> Dict:
-        """
-        Wrapper method required by the Orchestrator.
-        """
         score, details = self.analyze(repo_path)
         return {
             "agent": "contributor",

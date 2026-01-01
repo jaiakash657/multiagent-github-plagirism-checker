@@ -35,6 +35,5 @@ def hamming_distance(h1: int, h2: int) -> int:
     return bin(h1 ^ h2).count("1")
 
 def simhash_similarity(h1: int, h2: int) -> float:
-    """Return similarity score between 0 and 1."""
     dist = hamming_distance(h1, h2)
     return 1 - dist / 64

@@ -1,16 +1,35 @@
 from core.weights import AGENT_WEIGHTS, TOTAL_WEIGHT
 
+from core.weights import AGENT_WEIGHTS
+
 def aggregate_single_repo(results: list):
-    weighted_sum = 0
+    weighted_sum = 0.0
+    weight_sum = 0.0
+
     for r in results:
         agent = r.get("agent")
-        score = float(r.get("score", 0))
-        weight = AGENT_WEIGHTS.get(agent, 1.0)
-        weighted_sum += score * weight
-    final_score = weighted_sum / TOTAL_WEIGHT
-    return round(final_score, 4)
+        score = r.get("score", None)
 
-# keep aggregate_multiple_repos as you had earlier, calling aggregate_single_repo
+        # 🚫 skip agents that did not produce a meaningful signal
+        if score is None:
+            continue
+
+        score = float(score)
+
+        # structural / semantic agents returning 0 means "not applicable"
+        if score <= 0 and agent != "fingerprint":
+            continue
+
+        weight = AGENT_WEIGHTS.get(agent, 1.0)
+
+        weighted_sum += score * weight
+        weight_sum += weight
+
+    if weight_sum == 0:
+        return 0.0
+
+    return round(weighted_sum / weight_sum, 4)
+
 
 def aggregate_multiple_repos(repo_results: dict):
     """

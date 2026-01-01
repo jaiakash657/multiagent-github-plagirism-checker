@@ -1,48 +1,73 @@
 # fingerprinting/manager.py
 import os
-import json
-from typing import List, Dict, Any
+from typing import Dict, Any, List
 from .simhash import normalize_code, tokenize, compute_simhash
 from .winnowing import winnow
 
-# file extensions to include
 CODE_EXTS = (".py", ".js", ".java", ".ts", ".cpp", ".c", ".hpp", ".h")
+SKIP_DIRS = ("node_modules", ".git", "venv", "__pycache__", "dist", "build")
 
-def read_repo_text(repo_path: str) -> str:
-    collected = []
+def iter_code_files(repo_path: str):
     for root, _, files in os.walk(repo_path):
-        # skip common large dirs
-        if any(ex in root for ex in ("node_modules", ".git", "venv", "__pycache__", "dist")):
+        if any(skip in root for skip in SKIP_DIRS):
             continue
-        for f in files:
-            if f.lower().endswith(CODE_EXTS):
-                fp = os.path.join(root, f)
-                try:
-                    with open(fp, "r", encoding="utf-8", errors="ignore") as fh:
-                        collected.append(fh.read())
-                except Exception:
-                    continue
-    return "\n".join(collected)
+        for file in files:
+            if file.lower().endswith(CODE_EXTS):
+                yield os.path.join(root, file)
 
-def compute_fingerprints_for_repo(repo_path: str, k: int = 25, window: int = 4) -> Dict[str, Any]:
+def fingerprint_file(file_path: str, k: int, window: int) -> Dict[str, Any]:
+    try:
+        with open(file_path, "r", encoding="utf-8", errors="ignore") as f:
+            code = f.read()
+    except Exception:
+        return None
+
+    if not code.strip():
+        return None
+
+    normalized = normalize_code(code)
+    tokens = tokenize(normalized)
+
+    if not tokens:
+        return None
+
+    return {
+        "path": file_path,
+        "extension": os.path.splitext(file_path)[1],
+        "token_count": len(tokens),
+        "simhash": compute_simhash(tokens),
+        "winnowing": winnow(tokens, k=k, window=window)
+    }
+
+def compute_fingerprints_for_repo(
+    repo_path: str,
+    k: int = 25,
+    window: int = 4
+) -> Dict[str, Any]:
     """
-    Returns dict:
+    Returns:
     {
-        "simhash": int,
-        "winnowing": [ [hash, pos], ... ],
-        "token_count": int
+        "repo_simhash": int,
+        "files": [ {...file_fingerprint}, ... ],
+        "total_tokens": int
     }
     """
-    txt = read_repo_text(repo_path)
-    if not txt.strip():
-        return {"simhash": 0, "winnowing": [], "token_count": 0}
 
-    normalized = normalize_code(txt)
-    tokens = tokenize(normalized)
-    simhash_v = compute_simhash(tokens)
-    wfp = winnow(tokens, k=k, window=window)
+    file_fingerprints: List[Dict[str, Any]] = []
+    all_tokens: List[str] = []
+
+    for file_path in iter_code_files(repo_path):
+        fp = fingerprint_file(file_path, k, window)
+        if not fp:
+            continue
+
+        file_fingerprints.append(fp)
+        all_tokens.extend(fp["token_count"] * ["_"])  # weight aggregation
+
+    repo_simhash = compute_simhash(all_tokens) if all_tokens else 0
+
     return {
-        "simhash": simhash_v,
-        "winnowing": wfp,
-        "token_count": len(tokens)
+        "repo_simhash": repo_simhash,
+        "files": file_fingerprints,
+        "total_tokens": sum(f["token_count"] for f in file_fingerprints)
     }
