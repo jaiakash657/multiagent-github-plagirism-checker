@@ -3,7 +3,6 @@ from jinja2 import Environment, FileSystemLoader
 
 TEMPLATE_DIR = os.path.join(os.path.dirname(__file__), "templates")
 
-
 class ReportGenerator:
     def __init__(self):
         self.env = Environment(loader=FileSystemLoader(TEMPLATE_DIR))

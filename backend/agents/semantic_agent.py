@@ -20,13 +20,17 @@ class SemanticAgent:
         return self.model.encode([text], convert_to_numpy=True)[0]
 
     def analyze(self, repo_path: str, depth: int = 1) -> Tuple[float, Dict]:
-        # collect file texts
         texts = []
         for root, _, files in os.walk(repo_path):
             for f in files:
                 if f.endswith((".py", ".java", ".js", ".md")):
                     try:
-                        with open(os.path.join(root, f), "r", encoding="utf-8", errors="ignore") as fh:
+                        with open(
+                            os.path.join(root, f),
+                            "r",
+                            encoding="utf-8",
+                            errors="ignore",
+                        ) as fh:
                             texts.append(fh.read()[:2000])
                     except Exception:
                         continue
@@ -34,17 +38,14 @@ class SemanticAgent:
         if not texts:
             return 0.0, {"reason": "no_texts"}
 
-        # embeddings
         embs = [self._file_embedding(t) for t in texts]
         vecs = np.vstack(embs)
 
-        # normalize vectors
         norms = np.linalg.norm(vecs, axis=1, keepdims=True)
         norms[norms == 0] = 1
         nvecs = vecs / norms
 
-        # cosine similarity matrix
-        sims = (nvecs @ nvecs.T)
+        sims = nvecs @ nvecs.T
 
         n = sims.shape[0]
         if n <= 1:
@@ -55,16 +56,17 @@ class SemanticAgent:
 
         return mean_sim, {
             "mean_pairwise_similarity": mean_sim,
-            "files_analyzed": n
+            "files_analyzed": n,
         }
 
-    def run(self, repo_path: str) -> Dict:
+    def run(self, input_repo_path: str, cand_repo_path: str) -> Dict:
         """
-        Wrapper for Orchestrator compatibility.
+        Orchestrator-compatible entry point.
+        Semantic similarity is computed on the candidate repo.
         """
-        score, details = self.analyze(repo_path)
+        score, details = self.analyze(cand_repo_path)
         return {
             "agent": "semantic",
-            "score": score,
-            "details": details
+            "score": float(score),
+            "details": details,
         }

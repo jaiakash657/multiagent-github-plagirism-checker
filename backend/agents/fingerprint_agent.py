@@ -2,6 +2,7 @@
 
 import os
 import hashlib
+from typing import Dict, Any
 
 from fingerprinting.simhash import (
     normalize_code,
@@ -9,125 +10,169 @@ from fingerprinting.simhash import (
     compute_simhash,
     simhash_similarity,
 )
+
 from fingerprinting.winnowing import (
     winnow,
-    jaccard_from_fingerprints,
+    jaccard_similarity,
+)
+
+SUPPORTED_EXT = (".py", ".java", ".js", ".ts", ".cpp", ".c")
+
+
+import os
+from typing import Dict, Any, Set
+
+from fingerprinting.simhash import (
+    normalize_code,
+    tokenize,
+    compute_simhash,
+    simhash_similarity,
+)
+
+from fingerprinting.winnowing import (
+    winnow,
+    jaccard_similarity,
 )
 
 from storage.db import save_repository, save_fingerprint
 
-SUPPORTED_EXT = (".py", ".java", ".js")
+
+SUPPORTED_EXT = (".py", ".java", ".js", ".ts", ".cpp", ".c")
 
 
 class FingerprintAgent:
     """
-    FingerprintAgent:
-    - Repo-level SimHash (coarse similarity)
-    - Repo-level Winnowing + Jaccard (fine similarity)
-    - NO URL shortcuts, NO forced identity
+    FingerprintAgent (DB-first, scalable)
+
+    Responsibilities:
+    1. Compute fingerprint ONCE for input repo
+    2. Persist fingerprint to DB (learning step)
+    3. Compare input fingerprint with DB fingerprints
     """
 
-    # ------------------------------
-    # Token collection
-    # ------------------------------
-    def _collect_tokens(self, repo_path: str):
+    # --------------------------------------------------
+    # STEP 1: Compute input fingerprint (filesystem)
+    # --------------------------------------------------
+    def compute_input_fingerprint(self, repo_path: str) -> Dict[str, Any]:
         tokens = []
-        file_blobs = []
 
         for root, _, files in os.walk(repo_path):
             for f in files:
-                if f.endswith(SUPPORTED_EXT):
-                    path = os.path.join(root, f)
-                    try:
-                        with open(path, "r", encoding="utf-8", errors="ignore") as fh:
-                            code = fh.read()
-                        norm = normalize_code(code)
-                        toks = tokenize(norm)
-                        tokens.extend(toks)
-                        file_blobs.append((path, norm))
-                    except Exception:
-                        continue
+                if not f.lower().endswith(SUPPORTED_EXT):
+                    continue
 
-        return tokens, file_blobs
+                file_path = os.path.join(root, f)
+                try:
+                    with open(file_path, "r", encoding="utf-8", errors="ignore") as fh:
+                        code = fh.read()
+                except Exception:
+                    continue
 
-    # ------------------------------
-    # Content hash (storage only)
-    # ------------------------------
-    def _compute_content_hash(self, file_blobs):
-        h = hashlib.sha256()
-        for path, content in sorted(file_blobs, key=lambda x: x[0]):
-            h.update(path.encode())
-            h.update(content.encode())
-        return h.hexdigest()
+                if not code.strip():
+                    continue
 
-    # ------------------------------
-    # Compare
-    # ------------------------------
-    def compare(
-        self,
-        input_repo_url: str,
-        input_path: str,
-        cand_repo_url: str,
-        cand_path: str,
-    ) -> dict:
+                normalized = normalize_code(code)
+                toks = tokenize(normalized)
+                tokens.extend(toks)
 
-        # 1️⃣ Collect tokens
-        tokens_a, blobs_a = self._collect_tokens(input_path)
-        tokens_b, blobs_b = self._collect_tokens(cand_path)
-
-        if not tokens_a or not tokens_b:
+        if not tokens:
             return {
-                "agent": "fingerprint",
-                "score": 0.0,
+                "simhash": 0,
+                "winnowing": set(),
+                "token_count": 0,
             }
 
-        # 2️⃣ Compute content hash (for DB, not scoring)
-        hash_a = self._compute_content_hash(blobs_a)
-        save_repository(input_repo_url, hash_a)
+        return {
+            "simhash": compute_simhash(tokens),
+            "winnowing": set(winnow(tokens)),
+            "token_count": len(tokens),
+        }
 
-        # 3️⃣ SimHash (coarse similarity)
-        simhash_a = compute_simhash(tokens_a)
-        simhash_b = compute_simhash(tokens_b)
-        simhash_score = simhash_similarity(simhash_a, simhash_b)
+    # --------------------------------------------------
+    # STEP 2: INGEST input repo into DB (CRITICAL)
+    # --------------------------------------------------
+    def ingest_repo(
+        self,
+        repo_url: str,
+        repo_path: str,
+    ) -> Dict[str, Any]:
+        """
+        Compute fingerprint and persist it to DB.
+        This is what makes the system LEARN.
+        """
 
-        # 4️⃣ Winnowing (fine similarity)
-        fp_a = winnow(tokens_a)
-        fp_b = winnow(tokens_b)
-        winnowing_score = jaccard_from_fingerprints(fp_a, fp_b)
+        fp = self.compute_input_fingerprint(repo_path)
 
-        # 5️⃣ Combined score
-        combined_score = (simhash_score + winnowing_score) / 2.0
+        if fp["token_count"] == 0:
+            return fp
 
-        # 6️⃣ Persist fingerprints
+        # Using simhash as content identity (good enough here)
+        content_hash = str(fp["simhash"])
+
+        repo_id = save_repository(repo_url, content_hash)
+
+        # ---- save simhash fingerprint ----
         save_fingerprint(
-            repo_id=save_repository(input_repo_url, hash_a),
+            repo_id=repo_id,
             agent="simhash",
-            score=simhash_score,
-            metadata={
-                "simhash": str(simhash_a),
-                "token_count": len(tokens_a),
+            score=1.0,
+            extra_data={   # ✅ FIXED
+                "simhash": str(fp["simhash"]),
+                "token_count": fp["token_count"],
             },
         )
 
+        # ---- save winnowing fingerprint ----
         save_fingerprint(
-            repo_id=save_repository(input_repo_url, hash_a),
+            repo_id=repo_id,
             agent="winnowing",
-            score=winnowing_score,
-            metadata={
-                "fingerprints": len(fp_a),
-                "token_count": len(tokens_a),
+            score=1.0,
+            extra_data={   # ✅ FIXED
+                "winnowing": list(fp["winnowing"]),
+                "token_count": fp["token_count"],
             },
         )
+
+        return fp
+
+    # --------------------------------------------------
+    # STEP 3: Compare with DB fingerprints (NO FS)
+    # --------------------------------------------------
+    def compare_with_db(
+        self,
+        input_fp: Dict[str, Any],
+        db_fp: Dict[str, Any],
+    ) -> Dict[str, Any]:
+        """
+        db_fp must contain:
+        {
+            "repo_url": str,
+            "simhash": int,
+            "winnowing": Set[int],
+            "token_count": int
+        }
+        """
+
+        simhash_score = simhash_similarity(
+            input_fp["simhash"],
+            db_fp["simhash"],
+        )
+
+        winnowing_score = jaccard_similarity(
+            input_fp["winnowing"],
+            set(db_fp["winnowing"]),
+        )
+
+        combined = (simhash_score + winnowing_score) / 2.0
 
         return {
             "agent": "fingerprint",
-            "simhash_score": simhash_score,
-            "winnowing_score": winnowing_score,
-            "score": combined_score,
+            "simhash_score": round(simhash_score, 4),
+            "winnowing_score": round(winnowing_score, 4),
+            "score": round(combined, 4),
             "details": {
-                "input_repo": input_repo_url,
-                "candidate_repo": cand_repo_url,
-                "token_count_a": len(tokens_a),
-                "token_count_b": len(tokens_b),
+                "candidate_repo": db_fp["repo_url"],
+                "input_tokens": input_fp["token_count"],
+                "candidate_tokens": db_fp["token_count"],
             },
         }

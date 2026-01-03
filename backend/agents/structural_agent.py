@@ -1,68 +1,129 @@
-# agents/structural_agent.py
-import ast
-import hashlib
+from typing import Dict, Optional
 import os
-from typing import List, Dict
+import logging
 
-SUPPORTED_EXT = (".py", ".java", ".js")
+from fingerprinting.parsing.language_detector import detect_language
+from fingerprinting.parsing.treesitter_parser import TreeSitterParser
 
-class StructuralExtractor(ast.NodeVisitor):
-    def __init__(self):
-        self.nodes = []
+from fingerprinting.uast.uast_builder import UASTBuilder
+from fingerprinting.uast.uast_compare import UASTComparator
 
-    def generic_visit(self, node):
-        self.nodes.append(type(node).__name__)
-        super().generic_visit(node)
-
-def extract_structure(code: str) -> List[str]:
-    try:
-        tree = ast.parse(code)
-    except SyntaxError:
-        return []
-
-    extractor = StructuralExtractor()
-    extractor.visit(tree)
-    return extractor.nodes
-
-def structural_similarity(seq_a: List[str], seq_b: List[str]) -> float:
-    if not seq_a or not seq_b:
-        return 0.0
-
-    set_a, set_b = set(seq_a), set(seq_b)
-    return len(set_a & set_b) / len(set_a | set_b)
+logger = logging.getLogger(__name__)
 
 
 class StructuralAgent:
     """
-    StructuralAgent:
-    - AST-based structural similarity
-    - Repo vs repo comparison
+    StructuralAgent (UAST-based)
+
+    - Builds UAST from Tree-sitter AST
+    - Compares UAST subtrees
+    - Language-agnostic
+    - Runs ONLY for Top-K candidates
     """
 
-    def _collect_nodes(self, repo_path: str) -> List[str]:
-        nodes = []
+    # --------------------------------------------------
+    # Build UASTs for an entire repository
+    # --------------------------------------------------
+    def _build_repo_uast(self, repo_path: str):
+        uast_roots = []
+
         for root, _, files in os.walk(repo_path):
-            for f in files:
-                if f.endswith(SUPPORTED_EXT):
-                    try:
-                        with open(os.path.join(root, f), "r", encoding="utf-8", errors="ignore") as fh:
-                            code = fh.read()
-                        nodes.extend(extract_structure(code))
-                    except Exception:
+            for file in files:
+                file_path = os.path.join(root, file)
+
+                lang = detect_language(file_path)
+                if not lang:
+                    continue
+
+                try:
+                    with open(file_path, "r", encoding="utf-8", errors="ignore") as f:
+                        code = f.read()
+
+                    if not code.strip():
                         continue
-        return nodes
 
-    def run(self, input_path: str, cand_path: str) -> dict:
-        nodes_a = self._collect_nodes(input_path)
-        nodes_b = self._collect_nodes(cand_path)
+                    tree = TreeSitterParser.parse_code(code, lang)
+                    if not tree or not tree.root_node:
+                        continue
 
-        score = structural_similarity(nodes_a, nodes_b)
+                    uast_root = UASTBuilder.build(tree)
+                    uast_roots.append(uast_root)
+
+                except (UnicodeDecodeError, ValueError, RuntimeError) as e:
+                    logger.debug(f"[STRUCT] Failed parsing {file_path}: {e}")
+                    continue
+
+        return uast_roots
+
+    # --------------------------------------------------
+    # Orchestrator entry point
+    # --------------------------------------------------
+    def run(
+        self,
+        input_repo_path: str,
+        cand_repo_path: str,
+        simhash_score: Optional[float] = None,
+    ) -> Dict:
+        """
+        Compare structural similarity between two repositories.
+        """
+
+        # --------------------------------------------------
+        # FAST PATH:
+        # same directory + very high simhash → skip AST
+        # --------------------------------------------------
+        try:
+            if simhash_score is not None and simhash_score >= 0.9:
+                return {
+                    "agent": "structural",
+                    "score": 1.0,
+                    "details": {
+                        "reason": "high_simhash_skip_structure",
+                        "simhash_score": simhash_score,
+                    },
+                }
+        except OSError as e:
+            logger.debug(f"[STRUCT] samefile check skipped: {e}")
+
+        # --------------------------------------------------
+        # Build UASTs
+        # --------------------------------------------------
+        input_uasts = self._build_repo_uast(input_repo_path)
+        cand_uasts = self._build_repo_uast(cand_repo_path)
+
+        logger.info(
+            f"[STRUCT] input_uasts={len(input_uasts)} "
+            f"candidate_uasts={len(cand_uasts)}"
+        )
+
+        if not input_uasts or not cand_uasts:
+            return {
+                "agent": "structural",
+                "score": 0.0,
+                "details": {
+                    "reason": "no_uast_generated",
+                    "input_uast_count": len(input_uasts),
+                    "candidate_uast_count": len(cand_uasts),
+                },
+            }
+
+        # --------------------------------------------------
+        # Compare all UAST pairs (max similarity)
+        # --------------------------------------------------
+        scores = []
+        for u1 in input_uasts:
+            for u2 in cand_uasts:
+                score = UASTComparator.similarity(u1, u2)
+                scores.append(score)
+
+        final_score = max(scores) if scores else 0.0
 
         return {
             "agent": "structural",
-            "score": score,
+            "score": round(float(final_score), 4),
             "details": {
-                "node_count_a": len(nodes_a),
-                "node_count_b": len(nodes_b),
+                "input_uast_count": len(input_uasts),
+                "candidate_uast_count": len(cand_uasts),
+                "comparison_pairs": len(scores),
             },
         }

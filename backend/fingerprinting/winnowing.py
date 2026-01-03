@@ -1,60 +1,49 @@
 # fingerprinting/winnowing.py
 import hashlib
-from typing import List, Tuple
+from typing import List, Set
 
-def rolling_hash(kgram: str) -> int:
-    """Simple deterministic hash for a k-gram (use md5 and reduce)."""
-    h = hashlib.md5(kgram.encode("utf-8")).hexdigest()
+
+def rolling_hash(tokens: List[str]) -> int:
+    """
+    Deterministic rolling hash for a k-gram token list.
+    """
+    h = hashlib.md5(" ".join(tokens).encode("utf-8")).hexdigest()
     return int(h, 16) & 0xFFFFFFFFFFFFFFFF  # 64-bit
 
-def kgrams(tokens: List[str], k: int) -> List[str]:
-    if len(tokens) < k:
-        return []
-    return [" ".join(tokens[i:i+k]) for i in range(len(tokens)-k+1)]
 
-def winnow(tokens: List[str], k: int = 25, window: int = 4) -> List[Tuple[int,int]]:
+def winnow(tokens: List[str], k: int = 15, window: int = 4) -> Set[int]:
     """
-    Winnowing algorithm:
-      - build k-grams
-      - compute rolling hash for each k-gram
-      - for each window choose the minimum hash (with index) -> fingerprint
-    Returns list of (hash, position)
+    Winnowing algorithm (hash-only fingerprints).
+    Returns a set of hash values.
     """
-    kg = kgrams(tokens, k)
-    if not kg:
-        return []
+    n = len(tokens)
+    if n < k:
+        return set()
 
-    hashes = [rolling_hash(g) for g in kg]
+    # build rolling hashes
+    hashes = [
+        rolling_hash(tokens[i : i + k])
+        for i in range(n - k + 1)
+    ]
+
+    w = min(window, len(hashes))
     fingerprints = []
-    w = window
-    n = len(hashes)
-    if w > n:
-        # reduce window if repo small
-        w = n
 
-    # sliding window min (choose rightmost min for reproducibility)
-    for i in range(n - w + 1):
-        window_hashes = hashes[i:i+w]
+    for i in range(len(hashes) - w + 1):
+        window_hashes = hashes[i : i + w]
         min_val = min(window_hashes)
-        # pick the rightmost index of the min within the window
-        rel_idx = (w - 1) - window_hashes[::-1].index(min_val)
-        absolute_idx = i + rel_idx
-        fingerprints.append((min_val, absolute_idx))
 
-    # deduplicate while preserving order
-    seen = set()
-    uniq = []
-    for h,pos in fingerprints:
-        if h not in seen:
-            seen.add(h)
-            uniq.append((h,pos))
-    return uniq
+        # rightmost min for stability
+        idx = (w - 1) - window_hashes[::-1].index(min_val)
+        fingerprints.append(min_val)
 
-def jaccard_from_fingerprints(fp_a: List[Tuple[int,int]], fp_b: List[Tuple[int,int]]) -> float:
-    set_a = set(h for h,_ in fp_a)
-    set_b = set(h for h,_ in fp_b)
-    if not set_a or not set_b:
+    return set(fingerprints)
+
+
+def jaccard_similarity(fp_a: Set[int], fp_b: Set[int]) -> float:
+    if not fp_a or not fp_b:
         return 0.0
-    inter = len(set_a & set_b)
-    union = len(set_a | set_b)
+
+    inter = len(fp_a & fp_b)
+    union = len(fp_a | fp_b)
     return inter / union

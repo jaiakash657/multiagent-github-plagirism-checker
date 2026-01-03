@@ -1,12 +1,8 @@
 AGENT_WEIGHTS = {
-    "lexical": 1.0,
-    "structural": 1.0,
-    "semantic": 2.0,
-    "contributor": 0.5,
-    "fingerprint": 1.0,
-    "simhash": 0.5,
-    "winnowing": 1.5,
-    "ast": 2.0,   # or "uast" if renamed later
+    "fingerprint": 0.4,
+    "structural": 0.3,
+    "semantic": 0.2,
+    "contributor": 0.1,
 }
 
-TOTAL_WEIGHT = sum(AGENT_WEIGHTS.values())
+TOTAL_WEIGHT = sum(AGENT_WEIGHTS.values())  # = 1.0

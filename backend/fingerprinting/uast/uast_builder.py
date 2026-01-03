@@ -2,6 +2,11 @@ from fingerprinting.uast.uast_nodes import UASTNode, UASTNodeType
 
 
 NODE_MAP = {
+    # structure
+    "class_definition": UASTNodeType.CLASS,
+    "function_definition": UASTNodeType.FUNCTION,
+    "method_definition": UASTNodeType.FUNCTION,
+
     # loops
     "for_statement": UASTNodeType.LOOP,
     "while_statement": UASTNodeType.LOOP,
@@ -9,7 +14,7 @@ NODE_MAP = {
 
     # branches
     "if_statement": UASTNodeType.BRANCH,
-    "switch_statement": UASTNodeType.BRANCH,
+    "switch_statement": UASTNodeType.MULTI_BRANCH,
 
     # calls
     "call_expression": UASTNodeType.CALL,
@@ -24,23 +29,26 @@ NODE_MAP = {
 
 
 class UASTBuilder:
+    MAX_DEPTH = 20
+
     @staticmethod
     def build(tree):
         root = UASTNode(UASTNodeType.ENTRY)
-        UASTBuilder._walk(tree.root_node, root)
+        UASTBuilder._walk(tree.root_node, root, 0)
         return root
 
     @staticmethod
-    def _walk(ast_node, parent: UASTNode):
-        if ast_node is None:
+    def _walk(ast_node, parent: UASTNode, depth: int):
+        if ast_node is None or depth > UASTBuilder.MAX_DEPTH:
             return
 
         node_type = NODE_MAP.get(ast_node.type)
+        current_parent = parent
 
         if node_type:
             u_node = UASTNode(node_type)
             parent.add_child(u_node)
-            parent = u_node
+            current_parent = u_node
 
         for child in ast_node.children:
-            UASTBuilder._walk(child, parent)
+            UASTBuilder._walk(child, current_parent, depth + 1)

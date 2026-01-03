@@ -1,19 +1,16 @@
 from typing import List
 from fingerprinting.uast.uast_nodes import UASTNode
 
-
 class SubtreeExtractor:
     @staticmethod
     def extract(root: UASTNode) -> List[str]:
-        subtrees = []
-        SubtreeExtractor._dfs(root, subtrees)
-        return subtrees
+        acc = []
+        SubtreeExtractor._dfs(root, acc)
+        return acc
 
     @staticmethod
     def _dfs(node: UASTNode, acc: List[str]):
-        signature = SubtreeExtractor._serialize(node)
-        acc.append(signature)
-
+        acc.append(SubtreeExtractor._serialize(node))
         for child in node.children:
             SubtreeExtractor._dfs(child, acc)
 
