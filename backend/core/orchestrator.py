@@ -12,22 +12,19 @@ logger = logging.getLogger(__name__)
 
 class Orchestrator:
     """
-    Orchestrator responsibilities:
+    Orchestrator Responsibilities
+
     1. Ingest input repo (fingerprint → DB)
-    2. Rank DB repos using fingerprint similarity (NO filesystem)
+    2. Rank DB repos using fingerprint similarity
     3. Select TOP-K candidates
-    4. Run deep agents ONLY if thresholds pass
-    5. ALWAYS return fingerprint results
+    4. Run agents conditionally based on thresholds
     """
 
     def __init__(self):
         self.fingerprint_agent = FingerprintAgent()
         self.structural_agent = StructuralAgent()
-
-        self.heavy_agents = [
-            SemanticAgent(),
-            ContributorAgent(),
-        ]
+        self.semantic_agent = SemanticAgent()
+        self.contributor_agent = ContributorAgent()
 
     def run_multiple(
         self,
@@ -36,11 +33,12 @@ class Orchestrator:
         repo_paths: dict,        # {repo_url: local_path}
         db_candidates: list,     # [{repo_url, simhash, winnowing, token_count}]
         top_k: int = 3,
-        simhash_threshold: float = 0.01,
-        winnow_threshold: float = 0.05,
+        simhash_threshold: float = 0.05,
+        winnowing_threshold: float = 0.05,
+        force_heavy: bool = False,
     ):
         # --------------------------------------------------
-        # PHASE 0: Ingest input repo (learning step)
+        # PHASE 0: Ingest input repo
         # --------------------------------------------------
         input_fp = self.fingerprint_agent.ingest_repo(
             input_repo_url,
@@ -48,7 +46,7 @@ class Orchestrator:
         )
 
         # --------------------------------------------------
-        # PHASE 1: Fingerprint-only ranking (DB only)
+        # PHASE 1: Fingerprint-only ranking
         # --------------------------------------------------
         ranked = []
 
@@ -75,70 +73,135 @@ class Orchestrator:
             reverse=True,
         )
 
+        ranked = [
+            r for r in ranked
+            if r["repo_url"] != input_repo_url
+        ]
+
         top_candidates = ranked[:top_k]
 
         logger.info(
-            f"[ORCH] TOP-{top_k} fingerprint candidates: "
+            f"[ORCH] TOP-{top_k} candidates: "
             f"{[c['repo_url'] for c in top_candidates]}"
         )
 
         # --------------------------------------------------
-        # PHASE 2: Conditional deep analysis
+        # PHASE 2: Conditional Agent Execution
         # --------------------------------------------------
         aggregated_results = {}
 
         for item in top_candidates:
             cand_url = item["repo_url"]
             fp_res = item["fp"]
-
-            # 🔑 ALWAYS include fingerprint result
-            agent_scores = [fp_res]
-
-            # Skip deep analysis for self repo
-            if cand_url == input_repo_url:
-                aggregated_results[cand_url] = agent_scores
-                continue
-
             cand_path = repo_paths.get(cand_url)
 
+            agent_scores = []
+
             # -------------------------------
-            # Structural agent (AST)
+            # Fingerprint (ALWAYS)
             # -------------------------------
-            if (
-                cand_path
-                and fp_res["simhash_score"] >= simhash_threshold
-            ):
+            agent_scores.append(fp_res)
+
+            simhash_score = fp_res.get("simhash_score", 0.0)
+            winnowing_score = fp_res.get("winnowing_score", 0.0)
+
+            deep_allowed = (
+                force_heavy or
+                (
+                    simhash_score >= simhash_threshold
+                    and winnowing_score >= winnowing_threshold
+                )
+            )
+
+            # -------------------------------
+            # Structural Agent
+            # -------------------------------
+            if cand_path and deep_allowed:
                 try:
                     agent_scores.append(
                         self.structural_agent.run(
                             input_path,
                             cand_path,
-                            simhash_score=fp_res["simhash_score"],
+                            simhash_score=simhash_score,
                         )
                     )
                 except Exception:
-                    logger.exception(f"[AST ERROR] {cand_url}")
+                    logger.exception(f"[STRUCTURAL ERROR] {cand_url}")
+                    agent_scores.append({
+                        "agent": "structural",
+                        "score": 0.0,
+                        "details": {
+                            "status": "error",
+                            "reason": "structural_exception",
+                        },
+                    })
+            else:
+                agent_scores.append({
+                    "agent": "structural",
+                    "score": 0.0,
+                    "details": {
+                        "status": "skipped",
+                        "reason": "fingerprint_below_threshold",
+                        "simhash": simhash_score,
+                        "winnowing": winnowing_score,
+                    },
+                })
 
             # -------------------------------
-            # Heavy agents (semantic, contributor)
+            # Semantic Agent
             # -------------------------------
-            if (
-                cand_path
-                and fp_res["winnowing_score"] >= winnow_threshold
-            ):
-                for agent in self.heavy_agents:
-                    try:
-                        agent_scores.append(
-                            agent.run(input_path, cand_path)
+            if cand_path and deep_allowed:
+                try:
+                    agent_scores.append(
+                        self.semantic_agent.run(
+                            input_path,
+                            cand_path,
                         )
-                    except Exception:
-                        logger.exception(
-                            f"[AGENT ERROR] {agent.__class__.__name__} {cand_url}"
-                        )
+                    )
+                except Exception:
+                    logger.exception(f"[SEMANTIC ERROR] {cand_url}")
+                    agent_scores.append({
+                        "agent": "semantic",
+                        "score": 0.0,
+                        "details": {
+                            "status": "error",
+                            "reason": "semantic_exception",
+                        },
+                    })
+            else:
+                agent_scores.append({
+                    "agent": "semantic",
+                    "score": 0.0,
+                    "details": {
+                        "status": "skipped",
+                        "reason": "fingerprint_below_threshold",
+                    },
+                })
+
+            # -------------------------------
+            # Contributor Agent (ALWAYS)
+            # -------------------------------
+            try:
+                agent_scores.append(
+                    self.contributor_agent.run(
+                        input_path,
+                        cand_path,
+                    )
+                )
+            except Exception:
+                logger.exception(f"[CONTRIBUTOR ERROR] {cand_url}")
+                agent_scores.append({
+                    "agent": "contributor",
+                    "score": 0.0,
+                    "details": {
+                        "status": "error",
+                        "reason": "contributor_exception",
+                    },
+                })
 
             aggregated_results[cand_url] = agent_scores
 
         # --------------------------------------------------
-        # FINAL: Aggregate + normalize scores
+        # FINAL: Aggregate scores
         # --------------------------------------------------
         return aggregate_multiple_repos(aggregated_results)

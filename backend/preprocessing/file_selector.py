@@ -1,7 +1,7 @@
 import os
 
 ALLOWED_EXTENSIONS = {
-    ".py", ".js", ".java", ".cpp", ".ts", ".tsx",
+    ".py", ".js", ".jsx", ".java", ".cpp", ".ts", ".tsx",
     ".html", ".css", ".json", ".md", ".c", ".h"
 }
 

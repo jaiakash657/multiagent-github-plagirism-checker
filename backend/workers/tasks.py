@@ -1,5 +1,3 @@
-# workers/tasks.py
-
 import os
 import sys
 import shutil
@@ -86,7 +84,7 @@ def analyze_repository_task(self, repo_url: str, depth: int = 1):
         repo_paths[repo_url] = input_dir
 
         # --------------------------------------------------
-        # 2️⃣ INGEST input repo into DB (CRITICAL FIX)
+        # 2️⃣ INGEST input repo into DB
         # --------------------------------------------------
         fingerprint_agent = FingerprintAgent()
         input_fp = fingerprint_agent.ingest_repo(repo_url, input_dir)
@@ -97,48 +95,80 @@ def analyze_repository_task(self, repo_url: str, depth: int = 1):
         )
 
         # --------------------------------------------------
-        # 3️⃣ Fetch DB candidates (AFTER ingestion)
+        # 3️⃣ Fetch DB candidates
         # --------------------------------------------------
         db_candidates = get_simhash_candidates(limit=50)
 
-        # remove self from DB candidates
         db_candidates = [
             c for c in db_candidates if c["repo_url"] != repo_url
         ]
 
         if not db_candidates:
-            logger.info("[INFO] No DB candidates found (DB seeded only)")
+            logger.info("[INFO] No DB candidates found")
 
         # --------------------------------------------------
-        # 4️⃣ Run orchestrator (ranking + deep agents)
+        # 3️⃣.1 Rank DB candidates using fingerprint (TOP-K)
+        # --------------------------------------------------
+        ranked = []
+
+        for cand in db_candidates:
+            try:
+                fp_score = fingerprint_agent.compare_with_db(input_fp, cand)
+                ranked.append({
+                    "repo_url": cand["repo_url"],
+                    "score": (
+                        fp_score.get("simhash_score", 0.0)
+                        + fp_score.get("winnowing_score", 0.0)
+                    ),
+                })
+            except Exception:
+                logger.exception(f"[FP COMPARE FAILED] {cand.get('repo_url')}")
+                continue
+
+        ranked.sort(key=lambda x: x["score"], reverse=True)
+        top_k_repos = [r["repo_url"] for r in ranked[:3]]  # TOP-K = 3
+
+        logger.info(f"[TOP-K] Selected repos: {top_k_repos}")
+
+        # --------------------------------------------------
+        # 3️⃣.2 Clone ONLY TOP-K candidate repos
+        # --------------------------------------------------
+        for cand_url in top_k_repos:
+            cand_dir = clone_repo(cand_url, depth=1)
+            if cand_dir:
+                repo_paths[cand_url] = cand_dir
+
+        # --------------------------------------------------
+        # 4️⃣ Run orchestrator (FORCED heavy agents)
         # --------------------------------------------------
         orchestrator = Orchestrator()
 
         result = orchestrator.run_multiple(
             input_repo_url=repo_url,
             input_path=input_dir,
-            repo_paths=repo_paths,      # only input for now
+            repo_paths=repo_paths,
             db_candidates=db_candidates,
             top_k=3,
+            force_heavy=False,   
         )
 
         # --------------------------------------------------
-        # 5️⃣ Generate report
+        # 5️⃣ Generate report + PDF
         # --------------------------------------------------
-        report_path = os.path.join(
-            PROJECT_ROOT,
-            "reports",
-            f"{repo_url.split('/')[-1]}.html",
-        )
+        reporter = ReportGenerator()
 
-        ReportGenerator().generate(
-            report_data={
+        report_name = repo_url.split("/")[-1]
+
+        report_path = reporter.generate_html(
+            data={
                 "input_repo": repo_url,
                 "top_3_repos": result["top_3_repos"],
                 "all_repo_scores": result["all_repo_scores"],
             },
-            output_path=report_path,
+            report_name=report_name,
         )
+
+        pdf_path = reporter.generate_pdf(report_path)
 
         logger.info(f"===== [TASK DONE] {repo_url} =====")
 
@@ -147,6 +177,7 @@ def analyze_repository_task(self, repo_url: str, depth: int = 1):
             "top_3_repos": result["top_3_repos"],
             "all_repo_scores": result["all_repo_scores"],
             "report_path": report_path,
+            "pdf_path": pdf_path,
             "status": "completed",
         }
 

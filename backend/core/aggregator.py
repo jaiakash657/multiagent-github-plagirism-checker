@@ -10,7 +10,6 @@ def aggregate_single_repo(results: list):
         agent = r.get("agent")
         score = r.get("score", None)
 
-        # 🚫 skip agents that did not produce a meaningful signal
         if score is None:
             continue
 

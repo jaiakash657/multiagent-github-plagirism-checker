@@ -12,5 +12,14 @@ redis>=5.0.1
 celery>=5.4.0
 jinja2>=3.1.4
 python-dotenv>=1.0.1
-tree-sitter
-tree-sitter-languages
+
+xhtml2pdf
+
+# Tree-sitter Core Engine
+tree-sitter==0.23.2
+
+# Language Grammars (ABI 14 Compatible)
+tree-sitter-python==0.23.2
+tree-sitter-java==0.23.2
+tree-sitter-javascript==0.23.1
+tree-sitter-typescript==0.23.2

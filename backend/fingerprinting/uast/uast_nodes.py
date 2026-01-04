@@ -26,6 +26,29 @@ class UASTNodeType(Enum):
     RETURN = "RETURN"
 
 
+JS_NODE_MAP = {
+    # Functions
+    "function_declaration": UASTNodeType.FUNCTION,
+    "method_definition": UASTNodeType.FUNCTION,
+    "arrow_function": UASTNodeType.FUNCTION,
+
+    # Control flow
+    "if_statement": UASTNodeType.BRANCH,
+    "switch_statement": UASTNodeType.MULTI_BRANCH,
+    "for_statement": UASTNodeType.LOOP,
+    "while_statement": UASTNodeType.LOOP,
+
+    # Calls / ops
+    "call_expression": UASTNodeType.CALL,
+    "assignment_expression": UASTNodeType.ASSIGN,
+    "return_statement": UASTNodeType.RETURN,
+
+    # JSX (VERY IMPORTANT)
+    "jsx_element": UASTNodeType.CALL,   # component usage
+    "jsx_self_closing_element": UASTNodeType.CALL,
+}
+
+
 @dataclass
 class UASTNode:
     node_type: UASTNodeType

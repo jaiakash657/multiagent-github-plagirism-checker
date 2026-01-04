@@ -7,6 +7,7 @@ from config.logger import logger
 # Routers
 from api.routes.analysis import router as analysis_router
 from api.routes.status import router as status_router
+from api.routes import report
 
 
 # -------------------------------------------------
@@ -36,6 +37,7 @@ app.add_middleware(
 # -------------------------------------------------
 app.include_router(analysis_router, prefix="/api")
 app.include_router(status_router, prefix="/api")
+app.include_router(report.router, prefix="/reports", tags=["Reports"])
 
 
 # -------------------------------------------------

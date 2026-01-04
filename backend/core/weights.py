@@ -1,7 +1,7 @@
 AGENT_WEIGHTS = {
     "fingerprint": 0.4,
-    "structural": 0.3,
-    "semantic": 0.2,
+    "structural": 0.2,
+    "semantic": 0.3,
     "contributor": 0.1,
 }
 

@@ -1,49 +1,43 @@
-from tree_sitter_languages import get_language, get_parser
+from tree_sitter import Parser, Language
+import tree_sitter_python as tspython
+import tree_sitter_java as tsjava
+import tree_sitter_javascript as tsjs
+# pip install tree-sitter-typescript
+import tree_sitter_typescript as tsts 
+
+# Map keys to the actual grammar functions
+# Note: typescript and tsx are different grammars within the same package
+LANGUAGE_FUNCTIONS = {
+    "python": tspython.language,
+    "java": tsjava.language,
+    "javascript": tsjs.language,
+    "typescript": tsts.language_typescript,
+    "tsx": tsts.language_tsx,
+}
+
+_PARSER_CACHE = {}
 
 class TreeSitterParser:
-    """
-    Thin wrapper around tree-sitter.
-    Responsible ONLY for:
-    - loading parser
-    - parsing source code
-    """
-
-    _parser_cache = {}
-
     @staticmethod
-    def parse_code(code: str, language: str):
-        """
-        Parse source code and return tree-sitter AST.
+    def _get_parser(lang: str):
+        if lang in _PARSER_CACHE:
+            return _PARSER_CACHE[lang]
 
-        :param code: source code as string
-        :param language: 'python', 'java', 'javascript', 'cpp', etc.
-        :return: tree_sitter.Tree
-        """
-
-        if not code or not code.strip():
+        if lang not in LANGUAGE_FUNCTIONS:
             return None
 
-        parser = TreeSitterParser._get_parser(language)
-        if not parser:
-            raise ValueError(f"Unsupported language: {language}")
-
-        return parser.parse(bytes(code, "utf8"))
+        # Wrap the capsule in a Language object
+        # This fixes the "Incompatible Language version" and "PyCapsule" errors
+        lang_func = LANGUAGE_FUNCTIONS[lang]
+        language_object = Language(lang_func())
+        
+        parser = Parser(language_object)
+        _PARSER_CACHE[lang] = parser
+        return parser
 
     @staticmethod
-    def _get_parser(language: str):
-        """
-        Lazy-load and cache parsers per language.
-        """
-
-        if language in TreeSitterParser._parser_cache:
-            return TreeSitterParser._parser_cache[language]
-
-        try:
-            # load grammar + parser lazily
-            get_language(language)   # ensures grammar exists
-            parser = get_parser(language)
-        except Exception as e:
-            raise RuntimeError(f"Failed to load Tree-sitter parser for {language}") from e
-
-        TreeSitterParser._parser_cache[language] = parser
-        return parser
+    def parse_code(code: str, lang: str):
+        parser = TreeSitterParser._get_parser(lang)
+        if not parser or not code:
+            return None
+        return parser.parse(code.encode("utf8"))
