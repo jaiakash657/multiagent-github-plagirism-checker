@@ -8,7 +8,6 @@ export default function StatusLoader({ jobId }) {
   const [progress, setProgress] = useState(0);
 
   useEffect(() => {
-    // Simulate progress animation
     const progressInterval = setInterval(() => {
       setProgress(prev => {
         if (prev >= 90) return prev;
@@ -108,12 +107,10 @@ export default function StatusLoader({ jobId }) {
 
   const statusConfig = getStatusConfig();
 
-  // If we have a result, show it full screen
   if (result && !result.error) {
     return <ResultView result={result} />;
   }
 
-  // If there's an error
   if (result && result.error) {
     return (
       <div className="min-h-screen bg-linear-to-br from-slate-900 via-slate-800 to-slate-900 p-6 flex items-center justify-center">
@@ -149,15 +146,12 @@ export default function StatusLoader({ jobId }) {
     );
   }
 
-  // Loading state
   return (
     <div className="min-h-screen bg-linear-to-br from-slate-900 via-slate-800 to-slate-900 p-6 flex items-center justify-center">
       <div className="max-w-3xl w-full space-y-6">
         
-        {/* Status Card */}
         <div className="bg-white rounded-3xl shadow-2xl overflow-hidden border border-slate-200">
           
-          {/* Gradient Header */}
           <div className={`bg-linear-to-r ${statusConfig.color} p-8 text-white`}>
             <div className="flex items-center justify-between">
               <div className="flex items-center gap-4">
@@ -171,7 +165,6 @@ export default function StatusLoader({ jobId }) {
               </div>
             </div>
             
-            {/* Progress Bar */}
             <div className="mt-6">
               <div className="flex justify-between text-sm mb-2 opacity-90">
                 <span>Progress</span>
@@ -186,10 +179,8 @@ export default function StatusLoader({ jobId }) {
             </div>
           </div>
 
-          {/* Content */}
           <div className="p-8 space-y-6">
             
-            {/* Current Status */}
             <div className={`${statusConfig.bgColor} ${statusConfig.borderColor} border-2 rounded-2xl p-6`}>
               <div className="flex items-center gap-4">
                 <div className={`w-12 h-12 ${statusConfig.bgColor} rounded-xl flex items-center justify-center`}>
@@ -202,7 +193,6 @@ export default function StatusLoader({ jobId }) {
               </div>
             </div>
 
-            {/* Processing Steps */}
             <div className="space-y-3">
               <h3 className="font-bold text-slate-800 text-sm uppercase tracking-wider">
                 Processing Steps
@@ -238,7 +228,6 @@ export default function StatusLoader({ jobId }) {
               </div>
             </div>
 
-            {/* Info */}
             <div className="bg-blue-50 border border-blue-200 rounded-xl p-4 flex items-start gap-3">
               <svg className="w-5 h-5 text-blue-600 shrink-0 mt-0.5" fill="currentColor" viewBox="0 0 20 20">
                 <path fillRule="evenodd" d="M18 10a8 8 0 11-16 0 8 8 0 0116 0zm-7-4a1 1 0 11-2 0 1 1 0 012 0zM9 9a1 1 0 000 2v3a1 1 0 001 1h1a1 1 0 100-2v-3a1 1 0 00-1-1H9z" clipRule="evenodd" />
