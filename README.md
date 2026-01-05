@@ -1,135 +1,206 @@
-# Multi-Agent GitHub Plagiarism Checker
+Multi-Agent GitHub Plagiarism Detection System
 
-A powerful, multi-agent system designed to detect plagiarism and similarity across GitHub repositories. This application leverages a microservices-like architecture with specialized agents to analyze codebases using various techniques, including lexical analysis, semantic search, and structural fingerprinting.
+A scalable system to detect code plagiarism and similarity across GitHub repositories using a multi-agent architecture.
+The system combines lexical, structural, semantic, and contributor-based analysis to generate a final similarity score (in %).
 
-## 🚀 Features
+🚀 Features
 
-- **Multi-Agent Architecture**: Uses specialized agents for different types of similarity detection.
-- **Deep Analysis**:
-  - **Lexical Analysis**: Checks for text-based similarity.
-  - **Semantic Analysis**: Uses embeddings (Sentence Transformers) to understand code logic and meaning.
-  - **Structural Analysis**: Compares code structure and ASTs.
-  - **Fingerprinting**: Uses Winnowing and SimHash algorithms for robust matching.
-  - **Contributor Analysis**: Analyzes commit patterns and contributor history.
-- **Asynchronous Processing**: Powered by Celery and Redis for handling large codebases efficiently.
-- **Modern Frontend**: Built with React and Vite for a fast and responsive user interface.
+        Multi-agent plagiarism detection
 
-## 🏗 System Architecture
+        Threshold-based agent execution
 
-The project consists of three main components:
+        Weighted similarity aggregation
 
-1.  **Backend API (FastAPI)**: Handles user requests, manages the analysis pipeline, and aggregates results.
-2.  **Worker Nodes (Celery)**: Executes the heavy-lifting analysis tasks distributed across multiple agents.
-3.  **Frontend (React + Vite)**: Provides a user-friendly interface to submit repositories and view detailed reports.
+        Asynchronous processing with Celery
 
-### Agents
-- `lexical_agent.py`: Performs text-based comparison.
-- `semantic_agent.py`: Uses vector embeddings for semantic similarity.
-- `structural_agent.py`: Analyzes the structural integrity and patterns of the code.
-- `fingerprint_agent.py` / `winnowing_agent.py`: Implements fingerprinting algorithms for exact and near-duplicate detection.
-- `simhash_agent.py`: Uses SimHash for locality-sensitive hashing.
-- `contributor_agent.py`: Checks for contributor overlap and patterns.
+        Frontend-ready percentage scores
 
-## 🛠 Tech Stack
+        Scalable and production-friendly architecture
 
-- **Backend**: Python, FastAPI, SQLAlchemy, Pydantic
-- **ML & NLP**: Sentence Transformers, FAISS, Scikit-learn
-- **Task Queue**: Celery
-- **Message Broker**: Redis
-- **Frontend**: React, Vite, Axios
-- **Database**: PostgreSQL (via SQLAlchemy)
+🧠 Similarity Agents
 
-## 📋 Prerequisites
+        SimHash – Fast lexical similarity
 
-Before running the project, ensure you have the following installed:
+        Winnowing – Substring fingerprint matching
 
-- **Python** (3.9+)
-- **Node.js** (16+) & **npm**
-- **Redis Server** (Must be running for Celery to work)
-- **Git**
+        AST – Structural similarity
 
-## ⚙️ Installation
+        Semantic – Embedding-based deep similarity
 
-### 1. Clone the Repository
-```bash
-git clone <repository-url>
-cd multiagent-github-plagirism-checker
-```
+        Contributor – Author and repo metadata comparison
 
-### 2. Backend Setup
-Navigate to the backend directory and set up the virtual environment.
+        Fingerprint – Early pruning heuristic
 
-```bash
-# Navigate to backend (or root if using shared venv)
+🛠️ Tech Stack
+
+Backend
+
+        Python 3.10+
+
+        FastAPI
+
+        Celery
+
+        Redis
+
+        PostgreSQL
+
+        FAISS
+
+        Tree-sitter
+
+Frontend
+
+        React
+
+        Vite
+
+        Tailwind CSS
+
+📂 Project Structure
+
+        backend/
+        ├── app/
+        │   ├── main.py
+        │   ├── orchestrator/
+        │   ├── agents/
+        │   ├── core/
+        │   └── celery_app.py
+        ├── requirements.txt
+        └── .env
+
+        frontend/
+        ├── src/
+        ├── package.json
+        └── vite.config.js
+
+⚙️ Setup Instructions (Copy–Paste Friendly)
+
+          1️⃣ Clone the Repository
+          git clone <your-repo-url>
+          cd <repo-folder>
+
+          🔧 Backend Setup
+          2️⃣ Create Virtual Environment
+          python -m venv venv
+
+
+          Activate it:
+
+          Windows
+
+          venv\Scripts\activate
+
+
+          Linux / Mac
+
+          source venv/bin/activate
+
+          3️⃣ Install Backend Dependencies
+          cd backend
+          pip install -r requirements.txt
+
+🔴 Start Redis (Required)
+
+Option A: Local Redis
+redis-server
+
+Option B: Docker Redis
+
+docker run -p 6379:6379 redis
+
+
+Keep Redis running in a separate terminal.
+
+🧵 Start Celery Worker
+
+Open a new terminal, activate venv again, then:
+
 cd backend
+celery -A app.celery_app worker --loglevel=info
 
-# Create virtual environment
-python -m venv venv
+🚀 Start FastAPI Backend (Uvicorn)
 
-# Activate virtual environment
-# Windows:
-..\venv\Scripts\activate
-# Linux/Mac:
-source ../venv/bin/activate
+Open another terminal, activate venv again, then:
 
-# Install dependencies
-pip install -r requirements.txt
-```
-
-### 3. Frontend Setup
-Navigate to the frontend directory and install dependencies.
-
-```bash
-cd ../frontend
-npm install
-```
-
-## 🚀 Running the Application
-
-You need to run three separate processes (terminals) to start the full application.
-
-### Terminal 1: Redis Server
-Ensure your Redis server is running.
-```bash
-# Windows (if installed via WSL or Memurai/Redis port)
-./redis-server.exe
-# Or simply start the service
-```
-
-### Terminal 2: Celery Worker
-Start the Celery worker to handle background tasks. Make sure you are in the `backend` directory (or root depending on your path) and your virtual environment is activated.
-
-```bash
-# From the root directory (assuming venv is active)
 cd backend
-celery -A workers.celery_app.celery_app worker --pool=solo --loglevel=info
-```
-*Note: On Windows, `--pool=solo` is often required.*
+uvicorn app.main:app --reload
 
-### Terminal 3: Backend API
-Start the FastAPI server.
 
-```bash
-# From the backend directory (assuming venv is active)
-uvicorn main:app --reload
-```
-The backend will be available at `http://localhost:8000`.
+Backend will be available at:
 
-### Terminal 4: Frontend
-Start the React development server.
+http://127.0.0.1:8000
 
-```bash
+🌐 Frontend Setup
+4️⃣ Install Frontend Dependencies
 cd frontend
+npm install
+
+5️⃣ Start Frontend
 npm run dev
-```
-The frontend will be available at `http://localhost:5173`.
 
-## 📡 API Endpoints
 
-- **`GET /`**: Health check.
-- **`GET /api/status`**: Check the status of the analysis service.
-- **`POST /api/analysis`**: Submit a repository for plagiarism analysis.
+Frontend will run at:
 
-## 🤝 Contributing
+http://localhost:5173
 
-Contributions are welcome! Please feel free to submit a Pull Request.
+📡 API Usage
+Analyze a GitHub Repository
+
+Endpoint
+
+POST /analyze
+
+
+Request Body
+
+{
+  "repo_url": "https://github.com/user/repository"
+}
+
+
+Sample Response
+
+{
+  "final_similarity": 34.4,
+  "verdict": "Low Similarity",
+  "agent_scores": {
+    "simhash": 32.8,
+    "winnowing": 34.7,
+    "semantic": 36.3,
+    "contributor": 40.0
+  }
+}
+
+📊 Similarity Verdicts
+Score Range	Verdict
+0–30%	Very Low Similarity
+30–60%	Moderate Similarity
+60%+	High Similarity
+🧪 Use Cases
+
+Academic plagiarism detection
+
+Assignment similarity checking
+
+Recruitment coding assignment screening
+
+Open-source code comparison
+
+🔮 Future Enhancements
+
+Persistent similarity database
+
+Cross-language plagiarism detection
+
+Visualization dashboards
+
+GitHub Actions integration
+
+Continuous learning from new repos
+
+👨‍💻 Author
+
+Jai Akash
+B.Tech CSE | Full Stack & AI Developer
+Focused on scalable systems, AI, and cloud-native architectures.
